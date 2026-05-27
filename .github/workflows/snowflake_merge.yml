@@ -1,4 +1,51 @@
-- name: Diagnose Snowflake Objects
+name: Daily Snowflake Customer Merge
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 20 * * *'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  run-merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake connector
+        run: |
+          pip install snowflake-connector-python
+
+      - name: Test Snowflake Connection
+        env:
+          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python - <<EOF
+          import snowflake.connector
+          conn = snowflake.connector.connect(
+              account  = "${{ secrets.SNOWFLAKE_ACCOUNT }}",
+              user     = "${{ secrets.SNOWFLAKE_USER }}",
+              password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+          )
+          cur = conn.cursor()
+          cur.execute("SELECT CURRENT_USER(), CURRENT_ACCOUNT(), CURRENT_DATE()")
+          print(cur.fetchone())
+          conn.close()
+          print("Connection successful!")
+          EOF
+
+      - name: Diagnose Snowflake Objects
         run: |
           python - <<EOF
           import snowflake.connector
