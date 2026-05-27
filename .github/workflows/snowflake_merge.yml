@@ -1,49 +1,4 @@
-name: Daily Snowflake Customer Merge
-
-on:
-  workflow_dispatch:
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-jobs:
-  run-merge:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Snowflake connector
-        run: |
-          pip install snowflake-connector-python
-
-      - name: Test Snowflake Connection
-        env:
-          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          python - <<EOF
-          import snowflake.connector
-          conn = snowflake.connector.connect(
-              account  = "${{ secrets.SNOWFLAKE_ACCOUNT }}",
-              user     = "${{ secrets.SNOWFLAKE_USER }}",
-              password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
-          )
-          cur = conn.cursor()
-          cur.execute("SELECT CURRENT_USER(), CURRENT_ACCOUNT(), CURRENT_DATE()")
-          print(cur.fetchone())
-          conn.close()
-          print("Connection successful!")
-          EOF
-
-      - name: Run merge.sql
+- name: Diagnose Snowflake Objects
         run: |
           python - <<EOF
           import snowflake.connector
@@ -51,32 +6,32 @@ jobs:
           conn = snowflake.connector.connect(
               account   = "${{ secrets.SNOWFLAKE_ACCOUNT }}",
               user      = "${{ secrets.SNOWFLAKE_USER }}",
-              password  = "${{ secrets.SNOWFLAKE_PASSWORD }}",
-              database  = "MASTER",
-              schema    = "PUBLIC",
-              warehouse = "MERGE_WH",
-              role      = "SYSADMIN"
+              password  = "${{ secrets.SNOWFLAKE_PASSWORD }}"
           )
 
           cur = conn.cursor()
 
-          # Explicitly set context before running merge
-          cur.execute("USE ROLE SYSADMIN")
-          cur.execute("USE WAREHOUSE MERGE_WH")
-          cur.execute("USE DATABASE MASTER")
-          cur.execute("USE SCHEMA MASTER.PUBLIC")
+          # Check 1 — what is current user and their default role
+          cur.execute("SELECT CURRENT_USER(), CURRENT_ROLE()")
+          print("User/Role:", cur.fetchone())
 
-          # Read and execute merge.sql
-          with open("merge.sql", "r") as f:
-              sql = f.read()
+          # Check 2 — what roles does this user have
+          cur.execute("SHOW ROLES")
+          print("\nAvailable roles:")
+          for row in cur.fetchall():
+              print(" -", row[1])
 
-          for statement in sql.split(";"):
-              statement = statement.strip()
-              if statement:
-                  print(f"Executing: {statement[:80]}...")
-                  cur.execute(statement)
-                  print(f"Done. Rows affected: {cur.rowcount}")
+          # Check 3 — what warehouses are available
+          cur.execute("SHOW WAREHOUSES")
+          print("\nAvailable warehouses:")
+          for row in cur.fetchall():
+              print(" -", row[0])
+
+          # Check 4 — what databases are available
+          cur.execute("SHOW DATABASES")
+          print("\nAvailable databases:")
+          for row in cur.fetchall():
+              print(" -", row[1])
 
           conn.close()
-          print("Merge completed successfully!")
           EOF
