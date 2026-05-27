@@ -44,10 +44,6 @@ jobs:
           EOF
 
       - name: Run merge.sql
-        env:
-          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python - <<EOF
           import snowflake.connector
@@ -62,12 +58,18 @@ jobs:
               role      = "SYSADMIN"
           )
 
+          cur = conn.cursor()
+
+          # Explicitly set context before running merge
+          cur.execute("USE ROLE SYSADMIN")
+          cur.execute("USE WAREHOUSE MERGE_WH")
+          cur.execute("USE DATABASE MASTER")
+          cur.execute("USE SCHEMA MASTER.PUBLIC")
+
+          # Read and execute merge.sql
           with open("merge.sql", "r") as f:
               sql = f.read()
 
-          cur = conn.cursor()
-
-          # Execute each statement one by one
           for statement in sql.split(";"):
               statement = statement.strip()
               if statement:
