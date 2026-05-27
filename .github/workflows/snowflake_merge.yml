@@ -1,38 +1,47 @@
----
 name: Daily Snowflake Customer Merge
+
 on:
   schedule:
-    - cron: 30 20 * * *
-  workflow_dispatch: null
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   run-merge:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Install SnowSQL
-        run: >
+        run: |
           curl -o snowsql.bash \
             https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.9-linux_x86_64.bash
           bash snowsql.bash --noprompt
-
           echo "$HOME/bin" >> $GITHUB_PATH
+          # Verify installation
+          export PATH="$HOME/bin:$PATH"
+          snowsql --version
+
       - name: Run merge_tbl_master_customers_stg.sql
         env:
-          SNOWSQL_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWSQL_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWSQL_PWD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          SNOWSQL_DATABASE: MASTER
-          SNOWSQL_SCHEMA: PUBLIC
+          SNOWSQL_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWSQL_USER:      ${{ secrets.SNOWFLAKE_USER }}
+          SNOWSQL_PWD:       ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWSQL_DATABASE:  MASTER
+          SNOWSQL_SCHEMA:    PUBLIC
           SNOWSQL_WAREHOUSE: MERGE_WH
-          SNOWSQL_ROLE: SYSADMIN
+          SNOWSQL_ROLE:      SYSADMIN
         run: |
+          export PATH="$HOME/bin:$PATH"
           snowsql -f merge_tbl_master_customers_stg.sql \
                   -o exit_on_error=true \
                   -o log_level=DEBUG \
                   -o output_format=csv
+
       - name: Notify on failure
         if: failure()
-        run: |
-          echo "Merge job FAILED at $(date). Check logs above."
-          # Replace with a curl to Slack/Teams webhook if needed
+        run: echo "Merge job FAILED at $(date). Check logs above."
