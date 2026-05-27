@@ -1,0 +1,47 @@
+name: Daily Snowflake Customer Merge
+
+on:
+  schedule:
+    - cron: '30 20 * * *'    # 2:00 AM IST = 8:30 PM UTC
+  workflow_dispatch:           # enables manual trigger from GitHub UI
+
+jobs:
+  run-merge:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # Step 3.1 — Pull your repo code (so merge.sql is available)
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 3.2 — Install SnowSQL CLI
+      - name: Install SnowSQL
+        run: |
+          curl -o snowsql.bash \
+            https://sfc-repo.snowflakecomputing.com/snowsql/bootstrap/1.2/linux_x86_64/snowsql-1.2.9-linux_x86_64.bash
+          bash snowsql.bash --noprompt
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      # Step 3.3 — Execute merge.sql against Snowflake
+      - name: Run merge.sql
+        env:
+          SNOWSQL_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWSQL_USER:      ${{ secrets.SNOWFLAKE_USER }}
+          SNOWSQL_PWD:       ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWSQL_DATABASE:  MASTER
+          SNOWSQL_SCHEMA:    PUBLIC
+          SNOWSQL_WAREHOUSE: MERGE_WH
+          SNOWSQL_ROLE:      SYSADMIN           # change to your role
+        run: |
+          snowsql -f merge.sql \
+                  -o exit_on_error=true \
+                  -o log_level=DEBUG \
+                  -o output_format=csv
+
+      # Step 3.4 — Notify on failure (optional but recommended)
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Merge job FAILED at $(date). Check logs above."
+          # Replace with a curl to Slack/Teams webhook if needed
