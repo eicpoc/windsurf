@@ -64,7 +64,7 @@ jobs:
           cur.execute("USE SCHEMA EIC_POC_SALES_DEV.MASTER")
 
           # Read and execute merge.sql
-          with open("merge.sql", "r") as f:
+          with open("windsurf/tables/merge/merge_tbl_master_customers.sql", "r") as f:
               sql = f.read()
 
           for statement in sql.split(";"):
