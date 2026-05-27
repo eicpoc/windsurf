@@ -22,14 +22,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install Snowflake connector
-        run: |
-          pip install snowflake-connector-python
+        run: pip install snowflake-connector-python
 
       - name: Test Snowflake Connection
-        env:
-          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           python - <<EOF
           import snowflake.connector
@@ -45,7 +40,7 @@ jobs:
           print("Connection successful!")
           EOF
 
-      - name: Diagnose Snowflake Objects
+      - name: Run merge.sql
         run: |
           python - <<EOF
           import snowflake.connector
@@ -53,32 +48,36 @@ jobs:
           conn = snowflake.connector.connect(
               account   = "${{ secrets.SNOWFLAKE_ACCOUNT }}",
               user      = "${{ secrets.SNOWFLAKE_USER }}",
-              password  = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+              password  = "${{ secrets.SNOWFLAKE_PASSWORD }}",
+              database  = "EIC_POC_SALES_DEV",
+              schema    = "MASTER",
+              warehouse = "COMPUTE_WH",
+              role      = "ACCOUNTADMIN"
           )
 
           cur = conn.cursor()
 
-          # Check 1 — what is current user and their default role
-          cur.execute("SELECT CURRENT_USER(), CURRENT_ROLE()")
-          print("User/Role:", cur.fetchone())
+          # Explicitly set context
+          cur.execute("USE ROLE ACCOUNTADMIN")
+          cur.execute("USE WAREHOUSE COMPUTE_WH")
+          cur.execute("USE DATABASE EIC_POC_SALES_DEV")
+          cur.execute("USE SCHEMA EIC_POC_SALES_DEV.MASTER")
 
-          # Check 2 — what roles does this user have
-          cur.execute("SHOW ROLES")
-          print("\nAvailable roles:")
-          for row in cur.fetchall():
-              print(" -", row[1])
+          # Read and execute merge.sql
+          with open("merge.sql", "r") as f:
+              sql = f.read()
 
-          # Check 3 — what warehouses are available
-          cur.execute("SHOW WAREHOUSES")
-          print("\nAvailable warehouses:")
-          for row in cur.fetchall():
-              print(" -", row[0])
-
-          # Check 4 — what databases are available
-          cur.execute("SHOW DATABASES")
-          print("\nAvailable databases:")
-          for row in cur.fetchall():
-              print(" -", row[1])
+          for statement in sql.split(";"):
+              statement = statement.strip()
+              if statement:
+                  print(f"Executing: {statement[:80]}...")
+                  cur.execute(statement)
+                  print(f"Done. Rows affected: {cur.rowcount}")
 
           conn.close()
+          print("Merge completed successfully!")
           EOF
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "Merge job FAILED at $(date). Check logs above."
