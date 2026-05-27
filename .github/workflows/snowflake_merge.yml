@@ -17,7 +17,7 @@ jobs:
           bash snowsql.bash --noprompt
 
           echo "$HOME/bin" >> $GITHUB_PATH
-      - name: Run merge.sql
+      - name: Run merge_tbl_master_customers_stg.sql
         env:
           SNOWSQL_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWSQL_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -27,7 +27,7 @@ jobs:
           SNOWSQL_WAREHOUSE: MERGE_WH
           SNOWSQL_ROLE: SYSADMIN
         run: |
-          snowsql -f merge.sql \
+          snowsql -f merge_tbl_master_customers_stg.sql \
                   -o exit_on_error=true \
                   -o log_level=DEBUG \
                   -o output_format=csv
